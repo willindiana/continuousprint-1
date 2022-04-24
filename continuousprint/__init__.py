@@ -218,18 +218,47 @@ class ContinuousprintPlugin(
         self._printer.set_temperature("bed", 0)  # turn bed off
         start_time = time.time()
 
-        while (time.time() - start_time) <= (60 * float(self._settings.get(["bed_cooldown_timeout"]))):  # timeout converted to seconds
+        from octoprint.util import RepeatedTimer  # todo move to top imports on success
+
+        interval = 20  # seconds
+
+        def condition():
             bed_temp = self._printer.get_current_temperatures()["bed"]["actual"]
-            if bed_temp <= float(self._settings.get(["bed_cooldown_threshold"])):
+
+            if (time.time() - start_time) >= (60 * float(self._settings.get(["bed_cooldown_timeout"]))):
+                self._logger.info(f"Timeout of {self._settings.get(['bed_cooldown_timeout'])} minutes exceeded")
+                return True  # Timeout Case
+            elif bed_temp <= float(self._settings.get(["bed_cooldown_threshold"])):
                 self._logger.info(
                     f"Cooldown threshold of {self._settings.get(['bed_cooldown_threshold'])} has been met"
                 )
-                return
+                return True
+            else:
+                return False
 
-        self._logger.info(
-            f"Timeout of {self._settings.get(['bed_cooldown_timeout'])} minutes exceeded"
-        )
-        return
+        def hello():
+            self._logger.info(
+                f"Waiting for threshold of {self._settings.get(['bed_cooldown_threshold'])} \n"
+                f"Bed at temperature {self._printer.get_current_temperatures()['bed']['actual']} \n"
+                f"Time Elapsed {time.time() - start_time - (60 * float(self._settings.get(['bed_cooldown_timeout'])))}"
+            )
+        # Documentation can be found here: https://docs.octoprint.org/en/master/modules/util.html
+        t = RepeatedTimer(interval, hello, run_first=True, condition=condition)
+        t.start()  # prints "Hello World!" 5 times, printing the first one
+    # directly, then waiting 1, 2, 3, 4s in between (adaptive interval)
+
+        # while (time.time() - start_time) <= (60 * float(self._settings.get(["bed_cooldown_timeout"]))):  # timeout converted to seconds
+        #     bed_temp = self._printer.get_current_temperatures()["bed"]["actual"]
+        #     if bed_temp <= float(self._settings.get(["bed_cooldown_threshold"])):
+        #         self._logger.info(
+        #             f"Cooldown threshold of {self._settings.get(['bed_cooldown_threshold'])} has been met"
+        #         )
+        #         return
+        #
+        # self._logger.info(
+        #     f"Timeout of {self._settings.get(['bed_cooldown_timeout'])} minutes exceeded"
+        # )
+        # return
 
     def clear_bed(self):
         if self._settings.get(["bed_cooldown_enabled"]):
